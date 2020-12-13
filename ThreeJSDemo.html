@@ -1,0 +1,565 @@
+﻿<html>
+	<head>
+		<title>CM20219 – Coursework 2 – WebGL</title>
+        <meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body { margin: 0; overflow: hidden; }
+			canvas { width: 100%; height: 100%; }
+			
+			input[id="setHeight"] {
+			position:absolute;
+			-webkit-transform: rotate(90deg);
+			bottom:100px;
+			}
+			input[id = "setGravity"] {
+			position:absolute;
+			-webkit-transform: rotate(90deg);
+			bottom:100px;
+			left:50px;
+			}
+			input[id = "setInitVelX"] {
+			position:absolute;
+			-webkit-transform: rotate(90deg);
+			bottom:100px;
+			left:100px;
+			}
+			input[id = "setInitVelY"] {
+			position:absolute;
+			-webkit-transform: rotate(90deg);
+			bottom:100px;
+			left:150px;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="height"><input id="setHeight" type="range" min="0" max="10" step="0.01" value="0" data-orientation="horizontal"> </div>
+		<div id="gravity"><input id="setGravity" type="range" min="0" max="25" step="0.01" value="12.5" data-orientation="horizontal"></div>
+		<div id="initialVelX"><input id="setInitVelX" type="range" min="-0.05" max="0.05" step="0.0001" value="0" data-orientation="horizontal"></div>
+		<div id="initialVelY"><input id="setInitVelY" type="range" min="-5" max="5" step="0.01" value="0" data-orientation="horizontal"></div>
+		<script src="three.js"></script>
+		<script src="OBJLoader.js"></script>
+		<script>
+            "use strict"; // https://stackoverflow.com/q/1335851/72470
+
+            // Global variables that are available in all functions.
+            // Note: You can add your own here, e.g. to store the rendering mode.
+            var camera, scene, renderer;
+			var mesh;
+			var rotateX = 0;
+			var rotateY = 0;
+			var rotateZ = 0;
+			var translateCamX = 0;
+			var translateCamY = 0;
+			var translateCamZ = 0;
+			var wireframe, geometry, particles;
+			var vert;
+			var lrOrbit = 0;
+			var udOrbit = 0;
+			var material;
+			
+			var groundPlane;
+			
+			var rabbitX = 0, rabbitY = 0, rabbitZ = 0;
+			var rabbit, rabbitWireframe, rabbitVertex;
+			
+			var showRabbit = 0;
+			var showRabbitWireframe = 0;
+			var showRabbitVertex = 0;
+			
+			var game = 0;
+			var startSim = 0;
+			
+			
+			var gravity;
+			var rabbitStartHeight;
+			var initialVelX, initialVelY; //Rabbit velocity values
+			var damping = 0.6; //Rabbit bounce damping
+			var startHeight;
+			
+			var simulationStartTime;
+			var bounceStartTime;
+		
+			var vel = 0;
+			var u = 0;
+			var bounceUp = -1;
+			var down = 1;
+			var velX;
+			
+			
+			var light2; // Extra lighting
+            // Initialise the scene, and draw it for the first time.
+            init();
+			animate();
+
+            // Listen for keyboard events, to react to them.
+            // Note: there are also other event listeners, e.g. for mouse events.
+            document.addEventListener('keydown', handleKeyDown);
+			document.addEventListener('keyup', handleKeyUp);
+
+            // Scene initialisation. This function is only run once, at the very beginning.
+            function init()
+            {
+                scene = new THREE.Scene();
+
+                // Set up the camera, move it to (3, 4, 5) and look at the origin (0, 0, 0).
+                camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+                camera.position.set(3, 4, 5);
+                camera.lookAt(new THREE.Vector3(0, 0, 0));
+
+                // Draw a helper grid in the x-z plane (note: y is up).
+                scene.add(new THREE.GridHelper(10, 20, 0xffffff));
+
+                // TO DO: Draw a cube (requirement 1).
+				geometry = new THREE.BoxGeometry( 1, 1, 1 ); // Create cube geometry
+				//var material = new THREE.MeshBasicMaterial( { color: 0x00ff00 } );
+				
+				
+				// Create array of basic materials to apply to each face of cube
+				var cubeImages = 
+				[
+					new THREE.MeshBasicMaterial( { map: new THREE.TextureLoader().load('media/orange.jpg'), side: THREE.SingleSide } ),
+					new THREE.MeshBasicMaterial( { map: new THREE.TextureLoader().load('media/apple.jpg'), side: THREE.SingleSide } ),
+					new THREE.MeshBasicMaterial( { map: new THREE.TextureLoader().load('media/pineapple.jpg'), side: THREE.SingleSide } ),
+					new THREE.MeshBasicMaterial( { map: new THREE.TextureLoader().load('media/banana.jpg'), side: THREE.SingleSide } ),
+					new THREE.MeshBasicMaterial( { map: new THREE.TextureLoader().load('media/watermelon.jpg'), side: THREE.SingleSide } ),
+					new THREE.MeshBasicMaterial( { map: new THREE.TextureLoader().load('media/pear.jpg'), side: THREE.SingleSide } )
+				]
+				material = new THREE.MeshFaceMaterial (cubeImages); // Apply mesh face material to cube
+				
+				mesh = new THREE.Mesh( geometry, material ); //Apply textured material to geometry
+				scene.add( mesh ); //Add the cube to the scene
+				mesh.position.set(0, 0, 0); //Center the cube
+
+				
+				//Create wireframe model of cube
+				var edges = new THREE.EdgesGeometry( mesh.geometry);
+				var edgeColour = new THREE.LineBasicMaterial( { color: 0xffffff, linewidth: 2 } );
+				wireframe = new THREE.LineSegments( edges, edgeColour );
+				
+				//Create vertex model of cube
+				var particleMaterial = new THREE.PointsMaterial({color: 0xffffff, size: 0.1});
+				particles = new THREE.Points( mesh.geometry, particleMaterial );
+				
+                // TO DO: Visualise the axes of the global coordinate system (requirment 2).
+				
+				//Create materials for lines
+				var materialX = new THREE.LineBasicMaterial({
+				color: 0xff0000
+				});
+				var materialY = new THREE.LineBasicMaterial({
+				color: 0x00ff00
+				});
+				var materialZ = new THREE.LineBasicMaterial({
+				color: 0x0000ff
+				});
+
+				//Create start and end points for lines
+				var geometryLineX = new THREE.Geometry();
+				geometryLineX.vertices.push(
+					new THREE.Vector3( -10, 0, 0 ),
+					new THREE.Vector3( 10, 0, 0 ),
+				);
+				
+				var geometryLineY = new THREE.Geometry();
+				geometryLineY.vertices.push(
+					new THREE.Vector3( 0, -10, 0 ),
+					new THREE.Vector3( 0, 10, 0 ),
+				);
+				
+				var geometryLineZ = new THREE.Geometry();
+				geometryLineZ.vertices.push(
+					new THREE.Vector3( 0, 0, -10 ),
+					new THREE.Vector3( 0, 0, 10 ),
+				);
+
+				//Apply texture to line geometries
+				var lineX = new THREE.Line( geometryLineX, materialX );
+				var lineY = new THREE.Line( geometryLineY, materialY );
+				var lineZ = new THREE.Line( geometryLineZ, materialZ );
+				
+				scene.add( lineX );
+				scene.add( lineY );
+				scene.add( lineZ );
+				
+				var child;
+				var ObjectWireframe;
+				
+				//Load and scale rabbit
+				var OBJLoader = new THREE.OBJLoader();
+				OBJLoader.load("./bunny-5000.obj", function(object){
+				rabbit = object;
+				rabbit.position.set(-0.25,0,0);
+				rabbit.scale.set(0.25,0.25,0.25);
+				rabbit.traverse( function ( child ) {
+					if ( child.isMesh ) {
+						//Convert mesh geometry to wireframe geometry
+						var wireframeGeometry = new THREE.WireframeGeometry( child.geometry );
+						
+						//Create materials for objects
+						var wireframeMaterial = new THREE.LineBasicMaterial( { color: 0xff0000 } );
+						var vertexMaterial = new THREE.PointsMaterial({color: 0x0000ff, size: 0.01});
+						
+						//Create wireframe and vertex objects
+						rabbitWireframe = new THREE.LineSegments( wireframeGeometry, wireframeMaterial );
+						rabbitVertex = new THREE.Points( child.geometry, vertexMaterial );
+						child.castShadow = true;
+						
+						//Add material to rabbit
+						child.material = new THREE.MeshStandardMaterial({metalness: 1, roughness: 0.7});
+					}
+				} );
+				//Scale and translate other render modes
+				rabbitVertex.position.set(-0.25,0,0);
+				rabbitWireframe.position.set(-0.25,0,0);
+				rabbitVertex.scale.set(0.25,0.25,0.25);
+				rabbitWireframe.scale.set(0.25,0.25, 0.25);
+				rabbit.castShadow = true;
+				})
+				//Hide sliders for game
+				document.getElementById("setHeight").style.display = "none";
+				document.getElementById("setGravity").style.display = "none";
+				document.getElementById("setInitVelX").style.display = "none";
+				document.getElementById("setInitVelY").style.display = "none";
+
+                // Basic ambient lighting.
+                scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+                // TO DO: add more complex lighting for 'face' rendering mode (requirement 4).
+				
+				//Adding green point light
+				var light = new THREE.PointLight( 0x00ff00, 3, 0 );
+				light.position.set( 5, 10, 5 );
+				scene.add( light );
+				light.castShadow = true;
+				
+				//Adding red point light
+				light2 = new THREE.PointLight( 0xff0000, 3, 0 );
+				light2.position.set( -5, 10, -5 );
+				light2.castShadow = true;
+				
+				
+				
+				//Set up a ground plane
+				var planeGeometry = new THREE.BoxGeometry(10, 10, 0.1, 0.1);
+				var planeMaterial = new THREE.MeshPhongMaterial({ color: "black" }); 
+				groundPlane = new THREE.Mesh(planeGeometry, planeMaterial);
+				groundPlane.recieveShadow = true;
+				groundPlane.rotateX( - Math.PI / 2);
+				groundPlane.position.set(0,-0.5,0);
+				groundPlane.receiveShadow = true;
+				mesh.castShadow = true;
+				 
+				
+                // Set up the Web GL renderer.
+                renderer = new THREE.WebGLRenderer({ antialias: true });
+				renderer.setPixelRatio(window.devicePixelRatio); // HiDPI/retina rendering
+                renderer.setSize(window.innerWidth, window.innerHeight);
+				renderer.shadowMap.enabled = true;
+				renderer.shadowMap.type = THREE.PCFShadowMap;
+                document.body.appendChild(renderer.domElement);
+				
+
+                // Handle resizing of the browser window.
+				window.addEventListener('resize', handleResize, false);
+            }
+
+            // Handle resizing of the browser window.
+            function handleResize()
+            {
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize(window.innerWidth, window.innerHeight);
+			}
+
+            // Animation loop function. This function is called whenever an update is required.
+			function animate()
+            {
+				requestAnimationFrame(animate);
+
+                // TO DO: This is a good place for code that rotates your cube (requirement 3).
+				mesh.rotation.x += rotateX/100;
+				mesh.rotation.y += rotateY/100;
+				mesh.rotation.z += rotateZ/100;
+				
+				
+				if(rabbitX){ //Rabbit x rotation
+					rabbit.rotation.x += rabbitX/100;
+					rabbitVertex.rotation.x += rabbitX/100;
+					rabbitWireframe.rotation.x += rabbitX/100;
+					}
+				if(rabbitY){ //Rabbit y rotation
+					rabbit.rotation.y += rabbitY/100;
+					rabbitVertex.rotation.y += rabbitY/100;
+					rabbitWireframe.rotation.y += rabbitY/100;
+					}
+				if(rabbitZ){ //Rabbit z rotation
+					rabbit.rotation.z += rabbitZ/100;
+					rabbitVertex.rotation.z += rabbitZ/100;
+					rabbitWireframe.rotation.z += rabbitZ/100;
+					}
+				
+				// Camera translation code
+				camera.translateX(translateCamX/10);
+				camera.translateY(translateCamY/10);
+				camera.translateZ(translateCamZ/10);
+				
+				
+				if(lrOrbit != 0 | udOrbit!= 0)
+				{
+					//Define variables
+					var p, theta, phi;
+					var x, y, z;
+					
+					//Get camera position cartesian
+					x = camera.position.x;
+					z = camera.position.y;
+					y = camera.position.z;
+					
+					//Get camera position spherical
+					p = Math.sqrt(x*x + y*y + z*z);
+					theta = Math.atan( Math.sqrt(x*x + y*y) / z );
+					phi = Math.atan(y/x);
+					
+					//Increment orbit angles
+					phi +=0.01*lrOrbit;
+					theta += 0.01*udOrbit;
+					
+					//Handle edge cases
+					theta = Math.min(3.141/2, Math.max(0.01, theta));
+					if(x<0){
+						phi += 3.14159;
+					}
+					
+					//Convert back to cartesian
+					x = p * Math.sin(theta) * Math.cos(phi);
+					z = p * Math.sin(theta) * Math.sin(phi);
+					y = p * Math.cos(theta);
+					
+					camera.position.set(x, y, z);
+					camera.lookAt(0,0,0);
+				}
+                // Render the current scene to the screen.
+				renderer.render(scene, camera);
+				
+				//Load creative exercise and check bounce state
+				if(game & (startSim==0))
+					setRabbit();
+				if(startSim == 1 & down == 1)
+					dropRabbit();
+				if(startSim == 1 & down == 0)
+					reboundRabbit();
+			}
+
+            // Handle keyboard presses.
+            function handleKeyDown(event)
+            {
+
+                switch (event.keyCode)
+                {
+                    // Render modes.
+                    case 70: // f = face
+						mesh.remove(wireframe);
+						mesh.remove(particles);
+						mesh.material = material;
+                        break;
+
+                    case 69: // e = edge (wireframe)
+						mesh.material = 0;
+						mesh.add( wireframe );
+						mesh.remove(particles);
+                        break;
+
+                    case 86: // v = vertex
+						mesh.remove(wireframe); 
+						mesh.material = 0;
+						mesh.add(particles);
+                        break;
+
+					case 49: //spawn rabbit face '1'
+						if(showRabbit == 0)
+							scene.add(rabbit);
+						if (showRabbit == 1)
+							scene.remove(rabbit);
+						showRabbit = (showRabbit +1 ) % 2;
+						break;
+					
+					case 50: //spawn rabbit wireframe '2'
+						if(showRabbitWireframe == 0)
+								scene.add(rabbitWireframe);
+							if (showRabbitWireframe == 1)
+								scene.remove(rabbitWireframe);
+							showRabbitWireframe = (showRabbitWireframe +1 ) % 2;
+							break;
+					case 51: //spawn rabbit vertex '3'
+						if(showRabbitVertex == 0)
+								scene.add(rabbitVertex);
+							if (showRabbitVertex == 1)
+								scene.remove(rabbitVertex);
+							showRabbitVertex = (showRabbitVertex +1 ) % 2;
+							break;
+							
+							
+                    // TO DO: add code for starting/stopping rotations (requirement 3).
+					case 88: // Toggle x rotation of cube 'x'
+						rotateX = (rotateX + 1) % 2;
+						break;
+					case 89: // Toggle y rotation of cube 'y'
+						rotateY = (rotateY + 1) % 2;
+						break;
+					case 90: // Toggle z rotation of cube 'z'
+						rotateZ = (rotateZ + 1) % 2;
+						break;
+						
+					case 66: //Toggle x rotation of rabbit 'b'
+						rabbitX = (rabbitX + 1) % 2;
+						break;
+						
+					case 77: // Toggle y rotation of rabbit 'n'
+						rabbitY = (rabbitY + 1) % 2;
+						break;
+				
+					case 78: // Toggle z rotation of rabbit 'm'
+						rabbitZ = (rabbitZ + 1) % 2;
+						break;
+						
+					case 73: // Increment camera y position 'i'
+						translateCamY = 1;
+						break;
+					case 75: // Decrement camera y position 'k'
+						translateCamY = -1;
+						break;
+					case 74:  // Decrement camera x position 'j'
+						translateCamX = -1;
+						break;
+					case 76: // Increment camera x position 'l'
+						translateCamX = 1;
+						break;
+					case 85:  // Decrement camera z position 'o'
+						translateCamZ = -1;
+						break;
+					case 79: // Increment camera z position 'u'
+						translateCamZ = 1;
+						break;
+					case 37:// Orbit camera left
+						lrOrbit = 1;
+						break;
+					case 38: // Orbit camera down
+						udOrbit = -1;
+						break;
+					case 39: // Orbit camera right
+						lrOrbit = -1;
+						break;
+					case 40: // Orbit camera up
+						udOrbit = 1;
+						break;
+					case 71: // 'g'
+						game = (game + 1) % 2;
+						if(game == 1)
+						{
+						//Show sliders for game
+						document.getElementById("setHeight").style.display = "block";
+						document.getElementById("setGravity").style.display = "block";
+						document.getElementById("setInitVelX").style.display = "block";
+						document.getElementById("setInitVelY").style.display = "block";
+						scene.add(groundPlane);
+						scene.add(light2);
+						}
+						else
+						{
+						//Hide sliders for game
+						document.getElementById("setHeight").style.display = "none";
+						document.getElementById("setGravity").style.display = "none";
+						document.getElementById("setInitVelX").style.display = "none";
+						document.getElementById("setInitVelY").style.display = "none";
+						scene.remove(groundPlane);
+						scene.remove(light2);
+						}
+						break;
+					case 80: //  'p' Start simulation / game
+						 var d = new Date();
+						 simulationStartTime = d.getTime();
+						 bounceStartTime = d.getTime();
+						 startHeight = Number(document.getElementById("setHeight").value);
+						 vel = 0;
+						 u = Number(initialVelY);
+						 velX = Number(initialVelX);
+						 startSim = 1;
+						 down = 1;
+						 break;
+                }
+            }
+			
+			// Handle key releases
+			function handleKeyUp(event)
+            {
+				if(event.keyCode == 74 | event.keyCode == 76)
+					translateCamX = 0;
+				if(event.keyCode == 73 | event.keyCode == 75)
+					translateCamY = 0;
+				if(event.keyCode == 79 | event.keyCode == 85)
+					translateCamZ = 0;
+				switch (event.keyCode)
+				{
+					case 39:
+						lrOrbit = 0;
+						break;
+					
+					case 40:
+						udOrbit = 0;
+						break;
+						
+					case 37:
+						lrOrbit = 0;
+						break;
+						
+					case 38:
+						udOrbit = 0;
+						break;
+				}
+			}
+		
+			//Function to set up rabbit for game
+			function setRabbit()
+			{
+				rabbit.position.set(-0.25,document.getElementById("setHeight").value , 0);
+				rabbitStartHeight = document.getElementById("setHeight").value;
+				gravity = document.getElementById("setGravity").value
+				initialVelY = document.getElementById("setInitVelY").value;
+				initialVelX = document.getElementById("setInitVelX").value;
+			}
+			
+			//Function to handle falling of rabbit
+			function dropRabbit()
+			{
+				console.log("falling");
+				var d = new Date();
+				var grav = Number(gravity);
+				//If rabbit reaches the floor, set rebound velocity
+				if(rabbit.position.y < 0){ 
+					down = 0;
+					u = -vel * damping;
+					velX = velX * damping;
+					bounceStartTime = d.getTime();
+				}
+				//SUVAT equations to calculate velocity, and displacement due to velocity and time
+				vel = u - grav * ((d.getTime() - bounceStartTime)/1000);
+				rabbit.position.set(rabbit.position.x+(velX*(d.getTime()-simulationStartTime)/1000), startHeight + ((u * (d.getTime()-bounceStartTime)/1000) - (0.5*(grav)*(d.getTime()-bounceStartTime)/1000*(d.getTime()-bounceStartTime)/1000)), 0);
+				if((d.getTime()-simulationStartTime) > 5000) //Time before resetting simulation
+					startSim = 0;
+			}
+			//Function to handle rebound of rabbit
+			function reboundRabbit()
+			{
+				console.log("rebound");
+				var d = new Date();
+				var grav = Number(gravity);
+				if(vel < 0.01) //When rabbit reaches peak of bounce
+					down = 1;
+				//SUVAT equations to calculate velocity, and displacement due to velocity and time
+				vel = u - grav * ((d.getTime() - bounceStartTime)/1000);
+				startHeight = 0;
+				rabbit.position.set(rabbit.position.x+(velX*(d.getTime()-simulationStartTime)/1000), startHeight + ((u * (d.getTime()-bounceStartTime)/1000) - (0.5*(grav)*(d.getTime()-bounceStartTime)/1000*(d.getTime()-bounceStartTime)/1000)), 0);
+			}
+		</script>
+	</body>
+</html>
